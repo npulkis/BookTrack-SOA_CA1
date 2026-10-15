@@ -1,0 +1,51 @@
+@page "/"
+@attribute [StreamRendering]
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Open Library Test</PageTitle>
+
+<h1>Open Library test</h1>
+<p>Hardcoded title search: <strong>@SearchTitle</strong></p>
+
+@if (isLoading)
+{
+    <p>Loading…</p>
+}
+else if (errorMessage is not null)
+{
+    <p>@errorMessage</p>
+}
+else
+{
+    <pre>@responseJson</pre>
+}
+
+@code {
+    private const string SearchTitle = "Harry Potter";
+    private string? responseJson;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("OpenLibrary");
+            var encodedTitle = Uri.EscapeDataString(SearchTitle);
+            responseJson = await client.GetStringAsync(
+                $"search.json?title={encodedTitle}&limit=5");
+        }
+        catch (HttpRequestException)
+        {
+            errorMessage = "Open Library could not be reached. Check your connection and try again.";
+        }
+        catch (TaskCanceledException)
+        {
+            errorMessage = "The Open Library request timed out. Please try again later.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
