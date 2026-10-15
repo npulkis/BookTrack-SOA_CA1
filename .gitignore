@@ -1,0 +1,32 @@
+# .NET build output
+bin/
+obj/
+
+# Rider / IntelliJ workspace and user-specific settings
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+
+# Test and coverage output
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Local secrets and environment-specific configuration
+appsettings.Local.json
+appsettings.*.Local.json
+.env
+.env.*
+!.env.example
+
+# OS/editor clutter
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
