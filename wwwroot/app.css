@@ -49,3 +49,10 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+.book-cover {
+    height: 18rem;
+    object-fit: contain;
+    padding: 1rem;
+    background-color: #f7f4ef;
+}
