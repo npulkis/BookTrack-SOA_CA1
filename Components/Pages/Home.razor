@@ -4,6 +4,7 @@
 @using BookTrack.Models
 @using BookTrack.Services
 @inject OpenLibraryService OpenLibraryService
+@inject ReadingListService ReadingListService
 
 <PageTitle>Book Search</PageTitle>
 
@@ -16,6 +17,29 @@
         <button class="btn btn-primary" type="submit" disabled="@isLoading">Search</button>
     </div>
 </form>
+
+<section class="mb-4">
+    <h2>My reading list</h2>
+    @if (ReadingListService.Books.Count == 0)
+    {
+        <p>No books saved yet.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var savedBook in ReadingListService.Books)
+            {
+                <li>
+                    @(savedBook.Title ?? "Untitled")
+                    @if (savedBook.Authors.Count > 0)
+                    {
+                        <span>by @string.Join(", ", savedBook.Authors)</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</section>
 
 @if (isLoading)
 {
@@ -58,6 +82,11 @@ else
                             @if (!string.IsNullOrWhiteSpace(book.Key))
                             {
                                 <a class="btn btn-outline-primary" href="@DetailsUrl(book)">View details</a>
+                                <button class="btn btn-primary ms-2"
+                                        @onclick="() => ReadingListService.Add(book)"
+                                        disabled="@ReadingListService.Contains(book)">
+                                    @(ReadingListService.Contains(book) ? "Added" : "Add to reading list")
+                                </button>
                             }
                         </div>
                     </article>

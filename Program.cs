@@ -15,6 +15,7 @@ builder.Services.AddHttpClient<OpenLibraryService>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
         "MarginReadingTracker/0.1 (mailto:d00239038@student.dkit.ie)");
 });
+builder.Services.AddScoped<ReadingListService>();
 
 var app = builder.Build();
 
