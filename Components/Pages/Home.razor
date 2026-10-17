@@ -42,6 +42,10 @@ else
                             <p class="card-text">
                                 @(book.Authors.Count > 0 ? string.Join(", ", book.Authors) : "Author not listed")
                             </p>
+                            @if (!string.IsNullOrWhiteSpace(book.Key))
+                            {
+                                <a class="btn btn-outline-primary" href="@DetailsUrl(book)">View details</a>
+                            }
                         </div>
                     </article>
                 </div>
@@ -51,6 +55,7 @@ else
 }
 
 @code {
+    // Use a fixed title while testing the API connection.
     private const string SearchTitle = "Harry Potter";
     private List<BookResult> books = [];
     private bool isLoading = true;
@@ -62,8 +67,9 @@ else
         {
             var client = HttpClientFactory.CreateClient("OpenLibrary");
             var encodedTitle = Uri.EscapeDataString(SearchTitle);
+            // Request a small set of fields for the result cards.
             var response = await client.GetFromJsonAsync<SearchResponse>(
-                $"search.json?title={encodedTitle}&limit=5&fields=title,author_name,cover_i");
+                $"search.json?title={encodedTitle}&limit=5&fields=key,title,author_name,cover_i,first_publish_year");
             books = response?.Books ?? [];
         }
         catch (HttpRequestException)
@@ -92,6 +98,9 @@ else
 
     private sealed class BookResult
     {
+        [JsonPropertyName("key")]
+        public string? Key { get; init; }
+
         [JsonPropertyName("title")]
         public string? Title { get; init; }
 
@@ -100,5 +109,31 @@ else
 
         [JsonPropertyName("cover_i")]
         public int? CoverId { get; init; }
+
+        [JsonPropertyName("first_publish_year")]
+        public int? FirstPublishYear { get; init; }
+    }
+
+    private static string DetailsUrl(BookResult book)
+    {
+        var workId = book.Key?.Split('/').LastOrDefault();
+        if (string.IsNullOrWhiteSpace(workId))
+        {
+            return "/";
+        }
+
+        var url = $"/book/{Uri.EscapeDataString(workId)}";
+        if (book.Authors.Count > 0)
+        {
+            url += $"?authors={Uri.EscapeDataString(string.Join(", ", book.Authors))}";
+        }
+
+        if (book.FirstPublishYear is not null)
+        {
+            url += url.Contains('?') ? "&" : "?";
+            url += $"firstPublishYear={book.FirstPublishYear}";
+        }
+
+        return url;
     }
 }

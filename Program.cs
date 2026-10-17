@@ -6,6 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Configure the HTTP client used to call Open Library.
 builder.Services.AddHttpClient("OpenLibrary", client =>
 {
     client.BaseAddress = new Uri("https://openlibrary.org/");

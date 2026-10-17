@@ -56,3 +56,16 @@ h1:focus {
     padding: 1rem;
     background-color: #f7f4ef;
 }
+
+.book-details {
+    max-width: 55rem;
+    margin: 2rem auto;
+}
+
+.book-detail-cover {
+    float: right;
+    max-width: min(12rem, 35%);
+    max-height: 18rem;
+    object-fit: contain;
+    margin: 0 0 1rem 1.5rem;
+}
