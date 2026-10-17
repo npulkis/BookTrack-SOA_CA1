@@ -4,20 +4,25 @@ namespace BookTrack.Services;
 
 public sealed class ReadingListService
 {
-    private readonly List<OpenLibraryBook> books = [];
+    private readonly List<ReadingListEntry> entries = [];
 
-    public IReadOnlyList<OpenLibraryBook> Books => books;
+    public IReadOnlyList<ReadingListEntry> Entries => entries;
 
     public bool Contains(OpenLibraryBook book)
     {
-        return books.Any(savedBook => savedBook.Key == book.Key);
+        return entries.Any(entry => entry.Book.Key == book.Key);
     }
 
     public void Add(OpenLibraryBook book)
     {
         if (!Contains(book))
         {
-            books.Add(book);
+            entries.Add(new ReadingListEntry(book));
         }
+    }
+
+    public void Remove(ReadingListEntry entry)
+    {
+        entries.Remove(entry);
     }
 }

@@ -20,21 +20,32 @@
 
 <section class="mb-4">
     <h2>My reading list</h2>
-    @if (ReadingListService.Books.Count == 0)
+    @if (ReadingListService.Entries.Count == 0)
     {
         <p>No books saved yet.</p>
     }
     else
     {
         <ul>
-            @foreach (var savedBook in ReadingListService.Books)
+            @foreach (var entry in ReadingListService.Entries)
             {
                 <li>
-                    @(savedBook.Title ?? "Untitled")
-                    @if (savedBook.Authors.Count > 0)
+                    @(entry.Book.Title ?? "Untitled")
+                    @if (entry.Book.Authors.Count > 0)
                     {
-                        <span>by @string.Join(", ", savedBook.Authors)</span>
+                        <span>by @string.Join(", ", entry.Book.Authors)</span>
                     }
+                    <div class="d-flex gap-2 mt-2">
+                        <select class="form-select w-auto" @bind="entry.Status" aria-label="Reading status">
+                            <option value="@ReadingStatus.WantToRead">Want to read</option>
+                            <option value="@ReadingStatus.Reading">Reading</option>
+                            <option value="@ReadingStatus.Finished">Finished</option>
+                        </select>
+                        <button class="btn btn-outline-danger btn-sm"
+                                @onclick="() => ReadingListService.Remove(entry)">
+                            Remove
+                        </button>
+                    </div>
                 </li>
             }
         </ul>
