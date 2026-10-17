@@ -1,13 +1,21 @@
 @page "/"
+@rendermode InteractiveServer
 @attribute [StreamRendering]
 @using BookTrack.Models
 @using BookTrack.Services
 @inject OpenLibraryService OpenLibraryService
 
-<PageTitle>Open Library Test</PageTitle>
+<PageTitle>Book Search</PageTitle>
 
-<h1>Open Library test</h1>
-<p>Hardcoded title search: <strong>@SearchTitle</strong></p>
+<h1>Book search</h1>
+
+<form class="mb-4" @onsubmit="SearchBooksAsync" @onsubmit:preventDefault="true">
+    <label class="form-label" for="book-search">Search by title</label>
+    <div class="input-group">
+        <input id="book-search" class="form-control" type="search" @bind="searchTitle" />
+        <button class="btn btn-primary" type="submit" disabled="@isLoading">Search</button>
+    </div>
+</form>
 
 @if (isLoading)
 {
@@ -16,6 +24,10 @@
 else if (errorMessage is not null)
 {
     <p>@errorMessage</p>
+}
+else if (!hasSearched)
+{
+    <p>Enter a book title to see results.</p>
 }
 else
 {
@@ -56,17 +68,33 @@ else
 }
 
 @code {
-    // Use a fixed title while testing the API connection.
-    private const string SearchTitle = "Harry Potter";
+    private string searchTitle = string.Empty;
     private List<OpenLibraryBook> books = [];
-    private bool isLoading = true;
+    private bool isLoading;
+    private bool hasSearched;
     private string? errorMessage;
 
-    protected override async Task OnInitializedAsync()
+    // Search Open Library with the title entered in the form.
+    private async Task SearchBooksAsync()
     {
+        hasSearched = true;
+        var title = searchTitle.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            // Ask for a title before sending the request.
+            books = [];
+            errorMessage = "Enter a book title to search.";
+            isLoading = false;
+            return;
+        }
+
+        searchTitle = title;
+        isLoading = true;
+        errorMessage = null;
+
         try
         {
-            books = await OpenLibraryService.SearchBooksAsync(SearchTitle);
+            books = await OpenLibraryService.SearchBooksAsync(title);
         }
         catch (HttpRequestException)
         {
