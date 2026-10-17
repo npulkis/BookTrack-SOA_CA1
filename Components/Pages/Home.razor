@@ -20,7 +20,15 @@
 
 <section class="mb-4">
     <h2>My reading list</h2>
-    @if (ReadingListService.Entries.Count == 0)
+    @if (isLoadingReadingList)
+    {
+        <p>Loading reading list…</p>
+    }
+    else if (readingListError is not null)
+    {
+        <p role="alert">@readingListError</p>
+    }
+    else if (ReadingListService.Entries.Count == 0)
     {
         <p>No books saved yet.</p>
     }
@@ -36,13 +44,18 @@
                         <span>by @string.Join(", ", entry.Book.Authors)</span>
                     }
                     <div class="d-flex gap-2 mt-2">
-                        <select class="form-select w-auto" @bind="entry.Status" aria-label="Reading status">
+                        <select class="form-select w-auto"
+                                value="@entry.Status"
+                                @onchange="args => UpdateStatusAsync(entry, args.Value?.ToString())"
+                                aria-label="Reading status"
+                                disabled="@isSavingReadingList">
                             <option value="@ReadingStatus.WantToRead">Want to read</option>
                             <option value="@ReadingStatus.Reading">Reading</option>
                             <option value="@ReadingStatus.Finished">Finished</option>
                         </select>
                         <button class="btn btn-outline-danger btn-sm"
-                                @onclick="() => ReadingListService.Remove(entry)">
+                                @onclick="() => RemoveFromReadingListAsync(entry)"
+                                disabled="@isSavingReadingList">
                             Remove
                         </button>
                     </div>
@@ -94,8 +107,8 @@ else
                             {
                                 <a class="btn btn-outline-primary" href="@DetailsUrl(book)">View details</a>
                                 <button class="btn btn-primary ms-2"
-                                        @onclick="() => ReadingListService.Add(book)"
-                                        disabled="@ReadingListService.Contains(book)">
+                                        @onclick="() => AddToReadingListAsync(book)"
+                                        disabled="@(isSavingReadingList || ReadingListService.Contains(book))">
                                     @(ReadingListService.Contains(book) ? "Added" : "Add to reading list")
                                 </button>
                             }
@@ -113,6 +126,79 @@ else
     private bool isLoading;
     private bool hasSearched;
     private string? errorMessage;
+    private bool isLoadingReadingList = true;
+    private bool isSavingReadingList;
+    private string? readingListError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReadingListService.LoadAsync();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            readingListError = "The saved reading list contains data the app could not read.";
+        }
+        catch (IOException)
+        {
+            readingListError = "The saved reading list could not be opened.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            readingListError = "The app does not have permission to read the saved reading list.";
+        }
+        finally
+        {
+            isLoadingReadingList = false;
+        }
+    }
+
+    private Task AddToReadingListAsync(OpenLibraryBook book)
+    {
+        return UpdateReadingListAsync(() => ReadingListService.AddAsync(book));
+    }
+
+    private Task RemoveFromReadingListAsync(ReadingListEntry entry)
+    {
+        return UpdateReadingListAsync(() => ReadingListService.RemoveAsync(entry));
+    }
+
+    private Task UpdateStatusAsync(ReadingListEntry entry, string? statusName)
+    {
+        if (!Enum.TryParse<ReadingStatus>(statusName, out var status))
+        {
+            return Task.CompletedTask;
+        }
+
+        return UpdateReadingListAsync(() => ReadingListService.UpdateStatusAsync(entry, status));
+    }
+
+    private async Task UpdateReadingListAsync(Func<Task> update)
+    {
+        isSavingReadingList = true;
+        readingListError = null;
+        try
+        {
+            await update();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            readingListError = "The saved reading list contains data the app could not read.";
+        }
+        catch (IOException)
+        {
+            readingListError = "The saved reading list could not be saved.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            readingListError = "The app does not have permission to save the reading list.";
+        }
+        finally
+        {
+            isSavingReadingList = false;
+        }
+    }
 
     // Search Open Library with the title entered in the form.
     private async Task SearchBooksAsync()
