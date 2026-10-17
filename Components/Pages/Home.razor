@@ -1,7 +1,8 @@
 @page "/"
 @attribute [StreamRendering]
-@using System.Text.Json.Serialization
-@inject IHttpClientFactory HttpClientFactory
+@using BookTrack.Models
+@using BookTrack.Services
+@inject OpenLibraryService OpenLibraryService
 
 <PageTitle>Open Library Test</PageTitle>
 
@@ -57,7 +58,7 @@ else
 @code {
     // Use a fixed title while testing the API connection.
     private const string SearchTitle = "Harry Potter";
-    private List<BookResult> books = [];
+    private List<OpenLibraryBook> books = [];
     private bool isLoading = true;
     private string? errorMessage;
 
@@ -65,12 +66,7 @@ else
     {
         try
         {
-            var client = HttpClientFactory.CreateClient("OpenLibrary");
-            var encodedTitle = Uri.EscapeDataString(SearchTitle);
-            // Request a small set of fields for the result cards.
-            var response = await client.GetFromJsonAsync<SearchResponse>(
-                $"search.json?title={encodedTitle}&limit=5&fields=key,title,author_name,cover_i,first_publish_year");
-            books = response?.Books ?? [];
+            books = await OpenLibraryService.SearchBooksAsync(SearchTitle);
         }
         catch (HttpRequestException)
         {
@@ -90,31 +86,7 @@ else
         }
     }
 
-    private sealed class SearchResponse
-    {
-        [JsonPropertyName("docs")]
-        public List<BookResult> Books { get; init; } = [];
-    }
-
-    private sealed class BookResult
-    {
-        [JsonPropertyName("key")]
-        public string? Key { get; init; }
-
-        [JsonPropertyName("title")]
-        public string? Title { get; init; }
-
-        [JsonPropertyName("author_name")]
-        public List<string> Authors { get; init; } = [];
-
-        [JsonPropertyName("cover_i")]
-        public int? CoverId { get; init; }
-
-        [JsonPropertyName("first_publish_year")]
-        public int? FirstPublishYear { get; init; }
-    }
-
-    private static string DetailsUrl(BookResult book)
+    private static string DetailsUrl(OpenLibraryBook book)
     {
         var workId = book.Key?.Split('/').LastOrDefault();
         if (string.IsNullOrWhiteSpace(workId))

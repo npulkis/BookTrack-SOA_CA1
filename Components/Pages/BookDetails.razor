@@ -1,8 +1,9 @@
 @page "/book/{WorkId}"
 @attribute [StreamRendering]
-@using System.Text.Json
+@using BookTrack.Models
+@using BookTrack.Services
 @using Microsoft.AspNetCore.Components
-@inject IHttpClientFactory HttpClientFactory
+@inject OpenLibraryService OpenLibraryService
 
 <PageTitle>@(Title ?? "Book details")</PageTitle>
 
@@ -16,7 +17,7 @@ else if (errorMessage is not null)
 {
     <p role="alert">@errorMessage</p>
 }
-else if (workRecord is not null)
+else if (work is not null)
 {
     <main class="book-details">
         @if (CoverId is not null)
@@ -70,36 +71,24 @@ else if (workRecord is not null)
     [SupplyParameterFromQuery(Name = "firstPublishYear")]
     public int? FirstPublishYear { get; set; }
 
-    private JsonDocument? workRecord;
+    private OpenLibraryWork? work;
     private bool isLoading = true;
     private string? errorMessage;
 
-    private string? Title => ReadString("title");
-    private string? Description => ReadDescription();
-    private List<string> Subjects => ReadStringArray("subjects");
-    private int? CoverId
-    {
-        get
-        {
-            var covers = ReadIntegerArray("covers");
-            return covers.Count > 0 ? covers[0] : null;
-        }
-    }
+    private string? Title => work?.Title;
+    private string? Description => work?.Description;
+    private List<string> Subjects => work?.Subjects ?? [];
+    private int? CoverId => work?.CoverId;
 
     protected override async Task OnParametersSetAsync()
     {
-        workRecord?.Dispose();
-        workRecord = null;
+        work = null;
         isLoading = true;
         errorMessage = null;
 
         try
         {
-            var client = HttpClientFactory.CreateClient("OpenLibrary");
-            var encodedWorkId = Uri.EscapeDataString(WorkId);
-            // Load the full shared record for the selected book.
-            var json = await client.GetStringAsync($"works/{encodedWorkId}.json");
-            workRecord = JsonDocument.Parse(json);
+            work = await OpenLibraryService.GetWorkAsync(WorkId);
         }
         catch (HttpRequestException)
         {
@@ -109,7 +98,7 @@ else if (workRecord is not null)
         {
             errorMessage = "The Open Library request timed out. Please try again later.";
         }
-        catch (JsonException)
+        catch (System.Text.Json.JsonException)
         {
             errorMessage = "Open Library returned data the app could not read.";
         }
@@ -117,66 +106,5 @@ else if (workRecord is not null)
         {
             isLoading = false;
         }
-    }
-
-    private string? ReadString(string propertyName)
-    {
-        if (workRecord?.RootElement.TryGetProperty(propertyName, out var value) != true)
-        {
-            return null;
-        }
-
-        return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    }
-
-    private string? ReadDescription()
-    {
-        if (workRecord?.RootElement.TryGetProperty("description", out var value) != true)
-        {
-            return null;
-        }
-
-        // Open Library descriptions can be plain text or an object with a value field.
-        if (value.ValueKind == JsonValueKind.String)
-        {
-            return value.GetString();
-        }
-
-        if (value.ValueKind == JsonValueKind.Object &&
-            value.TryGetProperty("value", out var description) &&
-            description.ValueKind == JsonValueKind.String)
-        {
-            return description.GetString();
-        }
-
-        return null;
-    }
-
-    private List<string> ReadStringArray(string propertyName)
-    {
-        if (workRecord?.RootElement.TryGetProperty(propertyName, out var value) != true ||
-            value.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        return value.EnumerateArray()
-            .Where(item => item.ValueKind == JsonValueKind.String)
-            .Select(item => item.GetString()!)
-            .ToList();
-    }
-
-    private List<int> ReadIntegerArray(string propertyName)
-    {
-        if (workRecord?.RootElement.TryGetProperty(propertyName, out var value) != true ||
-            value.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        return value.EnumerateArray()
-            .Where(item => item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out _))
-            .Select(item => item.GetInt32())
-            .ToList();
     }
 }

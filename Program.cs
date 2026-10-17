@@ -1,4 +1,5 @@
 using BookTrack.Components;
+using BookTrack.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,8 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Configure the HTTP client used to call Open Library.
-builder.Services.AddHttpClient("OpenLibrary", client =>
+// Configure the HTTP client used by the Open Library service.
+builder.Services.AddHttpClient<OpenLibraryService>(client =>
 {
     client.BaseAddress = new Uri("https://openlibrary.org/");
     client.Timeout = TimeSpan.FromSeconds(10);
