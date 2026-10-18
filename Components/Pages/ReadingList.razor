@@ -1,0 +1,184 @@
+@page "/reading-list"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@using BookTrack.Models
+@using BookTrack.Services
+@inject ReadingListService ReadingListService
+
+<PageTitle>My Reading List</PageTitle>
+
+<h1>My reading list</h1>
+
+@if (isLoading)
+{
+    <p>Loading reading list…</p>
+}
+else if (errorMessage is not null)
+{
+    <p role="alert">@errorMessage</p>
+}
+else
+{
+    <section class="mb-4">
+        <h2>Yearly reading goal</h2>
+        <p>Books finished in @goalYear: @FinishedCount of @goalTarget</p>
+        <div class="progress mb-3" role="progressbar" aria-valuenow="@FinishedCount" aria-valuemin="0" aria-valuemax="@goalTarget">
+            <div class="progress-bar" style="width: @ProgressPercent%">@ProgressPercent%</div>
+        </div>
+
+        <form class="row g-2 align-items-end" @onsubmit="SaveGoalAsync" @onsubmit:preventDefault="true">
+            <div class="col-auto">
+                <label class="form-label" for="goal-year">Year</label>
+                <input id="goal-year" class="form-control" type="number" min="1" @bind="goalYear" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label" for="goal-target">Books to read</label>
+                <input id="goal-target" class="form-control" type="number" min="1" @bind="goalTarget" />
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" type="submit" disabled="@isSaving">Save goal</button>
+            </div>
+        </form>
+        @if (goalSavedMessage is not null)
+        {
+            <p class="mt-2" role="status">@goalSavedMessage</p>
+        }
+    </section>
+
+    <section>
+        <h2>Saved books</h2>
+        @if (ReadingListService.Entries.Count == 0)
+        {
+            <p>No books saved yet. Search for a book and add it to your list.</p>
+        }
+        else
+        {
+            <ul class="list-group">
+                @foreach (var entry in ReadingListService.Entries)
+                {
+                    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <strong>@(entry.Book.Title ?? "Untitled")</strong>
+                            @if (entry.Book.Authors.Count > 0)
+                            {
+                                <span>by @string.Join(", ", entry.Book.Authors)</span>
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <select class="form-select w-auto"
+                                    value="@entry.Status"
+                                    @onchange="args => UpdateStatusAsync(entry, args.Value?.ToString())"
+                                    aria-label="Reading status"
+                                    disabled="@isSaving">
+                                <option value="@ReadingStatus.WantToRead">Want to read</option>
+                                <option value="@ReadingStatus.Reading">Reading</option>
+                                <option value="@ReadingStatus.Finished">Finished</option>
+                            </select>
+                            <button class="btn btn-outline-danger btn-sm"
+                                    @onclick="() => RemoveBookAsync(entry)"
+                                    disabled="@isSaving">
+                                Remove
+                            </button>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isSaving;
+    private int goalYear = DateTime.Today.Year;
+    private int goalTarget = 12;
+    private string? errorMessage;
+    private string? goalSavedMessage;
+
+    private int FinishedCount => ReadingListService.GetFinishedCount(goalYear);
+    private int ProgressPercent => goalTarget > 0 ? Math.Min(100, FinishedCount * 100 / goalTarget) : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReadingListService.LoadAsync();
+            goalYear = ReadingListService.GoalYear;
+            goalTarget = ReadingListService.AnnualGoal;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            errorMessage = "The saved reading list contains data the app could not read.";
+        }
+        catch (IOException)
+        {
+            errorMessage = "The saved reading list could not be opened.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = "The app does not have permission to read the saved reading list.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveGoalAsync()
+    {
+        if (goalYear < 1 || goalTarget < 1)
+        {
+            errorMessage = "Enter a valid year and a goal of at least one book.";
+            return;
+        }
+
+        await SaveChangesAsync(() => ReadingListService.UpdateGoalAsync(goalYear, goalTarget));
+        if (errorMessage is null)
+        {
+            goalSavedMessage = "Reading goal saved.";
+        }
+    }
+
+    private Task UpdateStatusAsync(ReadingListEntry entry, string? statusName)
+    {
+        if (!Enum.TryParse<ReadingStatus>(statusName, out var status))
+        {
+            return Task.CompletedTask;
+        }
+
+        goalSavedMessage = null;
+        return SaveChangesAsync(() => ReadingListService.UpdateStatusAsync(entry, status));
+    }
+
+    private Task RemoveBookAsync(ReadingListEntry entry)
+    {
+        goalSavedMessage = null;
+        return SaveChangesAsync(() => ReadingListService.RemoveAsync(entry));
+    }
+
+    private async Task SaveChangesAsync(Func<Task> save)
+    {
+        isSaving = true;
+        errorMessage = null;
+        try
+        {
+            await save();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            errorMessage = "The saved reading list contains data the app could not read.";
+        }
+        catch (IOException)
+        {
+            errorMessage = "The saved reading list could not be saved.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = "The app does not have permission to save the reading list.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

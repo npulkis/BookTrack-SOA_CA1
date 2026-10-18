@@ -15,23 +15,27 @@ public sealed class ReadingListService
     };
 
     private readonly string filePath;
+    private ReadingListData data = new();
 
     public ReadingListService(IWebHostEnvironment environment)
     {
         filePath = Path.Combine(environment.ContentRootPath, "App_Data", "reading-list.json");
     }
 
-    public IReadOnlyList<ReadingListEntry> Entries { get; private set; } = [];
+    public IReadOnlyList<ReadingListEntry> Entries => data.Entries;
+    public int GoalYear => data.GoalYear;
+    public int AnnualGoal => data.AnnualGoal;
 
     public async Task LoadAsync()
     {
         await FileLock.WaitAsync();
         try
         {
-            Entries = await ReadEntriesAsync();
-            if (!File.Exists(filePath))
+            var (loadedData, needsSave) = await ReadDataAsync();
+            data = loadedData;
+            if (needsSave)
             {
-                await SaveEntriesAsync(Entries);
+                await SaveDataAsync(data);
             }
         }
         finally
@@ -45,43 +49,66 @@ public sealed class ReadingListService
         return Entries.Any(entry => entry.Book.Key == book.Key);
     }
 
+    public int GetFinishedCount(int year)
+    {
+        return Entries.Count(entry => entry.Status == ReadingStatus.Finished && entry.FinishedDate?.Year == year);
+    }
+
     public Task AddAsync(OpenLibraryBook book)
     {
-        return UpdateAsync(entries =>
+        return UpdateAsync(savedData =>
         {
-            if (!entries.Any(entry => entry.Book.Key == book.Key))
+            if (!savedData.Entries.Any(entry => entry.Book.Key == book.Key))
             {
-                entries.Add(new ReadingListEntry(book));
+                savedData.Entries.Add(new ReadingListEntry(book));
             }
         });
     }
 
     public Task RemoveAsync(ReadingListEntry entry)
     {
-        return UpdateAsync(entries => entries.RemoveAll(savedBook => savedBook.Book.Key == entry.Book.Key));
+        return UpdateAsync(savedData =>
+            savedData.Entries.RemoveAll(savedBook => savedBook.Book.Key == entry.Book.Key));
     }
 
     public Task UpdateStatusAsync(ReadingListEntry entry, ReadingStatus status)
     {
-        return UpdateAsync(entries =>
+        return UpdateAsync(savedData =>
         {
-            var savedEntry = entries.FirstOrDefault(savedBook => savedBook.Book.Key == entry.Book.Key);
+            var savedEntry = savedData.Entries.FirstOrDefault(savedBook => savedBook.Book.Key == entry.Book.Key);
             if (savedEntry is not null)
             {
                 savedEntry.Status = status;
+                savedEntry.FinishedDate = status == ReadingStatus.Finished
+                    ? savedEntry.FinishedDate ?? DateOnly.FromDateTime(DateTime.Today)
+                    : null;
             }
         });
     }
 
-    private async Task UpdateAsync(Action<List<ReadingListEntry>> update)
+    public Task UpdateGoalAsync(int year, int bookCount)
+    {
+        if (year < 1 || bookCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(bookCount), "Year and book goal must be positive numbers.");
+        }
+
+        return UpdateAsync(savedData =>
+        {
+            savedData.GoalYear = year;
+            savedData.AnnualGoal = bookCount;
+        });
+    }
+
+    private async Task UpdateAsync(Action<ReadingListData> update)
     {
         await FileLock.WaitAsync();
         try
         {
-            var entries = await ReadEntriesAsync();
-            update(entries);
-            await SaveEntriesAsync(entries);
-            Entries = entries;
+            var (latestData, _) = await ReadDataAsync();
+            update(latestData);
+            await SaveDataAsync(latestData);
+            data = latestData;
         }
         finally
         {
@@ -89,18 +116,26 @@ public sealed class ReadingListService
         }
     }
 
-    private async Task<List<ReadingListEntry>> ReadEntriesAsync()
+    private async Task<(ReadingListData Data, bool NeedsSave)> ReadDataAsync()
     {
         if (!File.Exists(filePath))
         {
-            return [];
+            return (new ReadingListData(), true);
         }
 
         await using var stream = File.OpenRead(filePath);
-        return await JsonSerializer.DeserializeAsync<List<ReadingListEntry>>(stream, JsonOptions) ?? [];
+        using var document = await JsonDocument.ParseAsync(stream);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            var oldEntries = document.RootElement.Deserialize<List<ReadingListEntry>>(JsonOptions) ?? [];
+            return (new ReadingListData { Entries = oldEntries }, true);
+        }
+
+        return (document.RootElement.Deserialize<ReadingListData>(JsonOptions) ?? new ReadingListData(), false);
     }
 
-    private async Task SaveEntriesAsync(IReadOnlyList<ReadingListEntry> entries)
+    private async Task SaveDataAsync(ReadingListData savedData)
     {
         var directory = Path.GetDirectoryName(filePath)!;
         Directory.CreateDirectory(directory);
@@ -108,7 +143,7 @@ public sealed class ReadingListService
         var temporaryFilePath = $"{filePath}.tmp";
         await using (var stream = File.Create(temporaryFilePath))
         {
-            await JsonSerializer.SerializeAsync(stream, entries, JsonOptions);
+            await JsonSerializer.SerializeAsync(stream, savedData, JsonOptions);
         }
 
         File.Move(temporaryFilePath, filePath, overwrite: true);

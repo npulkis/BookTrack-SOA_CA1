@@ -18,52 +18,6 @@
     </div>
 </form>
 
-<section class="mb-4">
-    <h2>My reading list</h2>
-    @if (isLoadingReadingList)
-    {
-        <p>Loading reading list…</p>
-    }
-    else if (readingListError is not null)
-    {
-        <p role="alert">@readingListError</p>
-    }
-    else if (ReadingListService.Entries.Count == 0)
-    {
-        <p>No books saved yet.</p>
-    }
-    else
-    {
-        <ul>
-            @foreach (var entry in ReadingListService.Entries)
-            {
-                <li>
-                    @(entry.Book.Title ?? "Untitled")
-                    @if (entry.Book.Authors.Count > 0)
-                    {
-                        <span>by @string.Join(", ", entry.Book.Authors)</span>
-                    }
-                    <div class="d-flex gap-2 mt-2">
-                        <select class="form-select w-auto"
-                                value="@entry.Status"
-                                @onchange="args => UpdateStatusAsync(entry, args.Value?.ToString())"
-                                aria-label="Reading status"
-                                disabled="@isSavingReadingList">
-                            <option value="@ReadingStatus.WantToRead">Want to read</option>
-                            <option value="@ReadingStatus.Reading">Reading</option>
-                            <option value="@ReadingStatus.Finished">Finished</option>
-                        </select>
-                        <button class="btn btn-outline-danger btn-sm"
-                                @onclick="() => RemoveFromReadingListAsync(entry)"
-                                disabled="@isSavingReadingList">
-                            Remove
-                        </button>
-                    </div>
-                </li>
-            }
-        </ul>
-    }
-</section>
 
 @if (isLoading)
 {
@@ -108,7 +62,7 @@ else
                                 <a class="btn btn-outline-primary" href="@DetailsUrl(book)">View details</a>
                                 <button class="btn btn-primary ms-2"
                                         @onclick="() => AddToReadingListAsync(book)"
-                                        disabled="@(isSavingReadingList || ReadingListService.Contains(book))">
+                                        disabled="@(isLoadingReadingList || isSavingReadingList || ReadingListService.Contains(book))">
                                     @(ReadingListService.Contains(book) ? "Added" : "Add to reading list")
                                 </button>
                             }
@@ -157,21 +111,6 @@ else
     private Task AddToReadingListAsync(OpenLibraryBook book)
     {
         return UpdateReadingListAsync(() => ReadingListService.AddAsync(book));
-    }
-
-    private Task RemoveFromReadingListAsync(ReadingListEntry entry)
-    {
-        return UpdateReadingListAsync(() => ReadingListService.RemoveAsync(entry));
-    }
-
-    private Task UpdateStatusAsync(ReadingListEntry entry, string? statusName)
-    {
-        if (!Enum.TryParse<ReadingStatus>(statusName, out var status))
-        {
-            return Task.CompletedTask;
-        }
-
-        return UpdateReadingListAsync(() => ReadingListService.UpdateStatusAsync(entry, status));
     }
 
     private async Task UpdateReadingListAsync(Func<Task> update)
