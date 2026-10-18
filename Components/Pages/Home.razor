@@ -11,9 +11,18 @@
 <h1>Book search</h1>
 
 <form class="mb-4" @onsubmit="SearchBooksAsync" @onsubmit:preventDefault="true">
-    <label class="form-label" for="book-search">Search by title</label>
+    <label class="form-label" for="search-field">Search by</label>
     <div class="input-group">
-        <input id="book-search" class="form-control" type="search" @bind="searchTitle" />
+        <select id="search-field" class="form-select" @bind="searchField" aria-label="Search by">
+            <option value="title">Title</option>
+            <option value="author">Author</option>
+        </select>
+        <input id="book-search"
+               class="form-control"
+               type="search"
+               placeholder="@SearchPlaceholder"
+               aria-label="Search term"
+               @bind="searchQuery" />
         <button class="btn btn-primary" type="submit" disabled="@isLoading">Search</button>
     </div>
 </form>
@@ -75,7 +84,8 @@ else
 }
 
 @code {
-    private string searchTitle = string.Empty;
+    private string searchQuery = string.Empty;
+    private string searchField = "title";
     private List<OpenLibraryBook> books = [];
     private bool isLoading;
     private bool hasSearched;
@@ -143,23 +153,23 @@ else
     private async Task SearchBooksAsync()
     {
         hasSearched = true;
-        var title = searchTitle.Trim();
-        if (string.IsNullOrWhiteSpace(title))
+        var query = searchQuery.Trim();
+        if (string.IsNullOrWhiteSpace(query))
         {
-            // Ask for a title before sending the request.
+            // Ask for a search term before sending the request.
             books = [];
-            errorMessage = "Enter a book title to search.";
+            errorMessage = "Enter a search term.";
             isLoading = false;
             return;
         }
 
-        searchTitle = title;
+        searchQuery = query;
         isLoading = true;
         errorMessage = null;
 
         try
         {
-            books = await OpenLibraryService.SearchBooksAsync(title);
+            books = await OpenLibraryService.SearchBooksAsync(query, searchField);
         }
         catch (HttpRequestException)
         {
@@ -178,6 +188,10 @@ else
             isLoading = false;
         }
     }
+
+    private string SearchPlaceholder => searchField == "author"
+        ? "Enter an author name"
+        : "Enter a book title";
 
     private static string DetailsUrl(OpenLibraryBook book)
     {

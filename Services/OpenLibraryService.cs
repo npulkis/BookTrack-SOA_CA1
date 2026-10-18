@@ -6,11 +6,12 @@ namespace BookTrack.Services;
 
 public sealed class OpenLibraryService(HttpClient httpClient)
 {
-    public async Task<List<OpenLibraryBook>> SearchBooksAsync(string title)
+    public async Task<List<OpenLibraryBook>> SearchBooksAsync(string query, string searchField)
     {
-        var encodedTitle = Uri.EscapeDataString(title);
+        var parameter = searchField == "author" ? "author" : "title";
+        var encodedQuery = Uri.EscapeDataString(query);
         var response = await httpClient.GetFromJsonAsync<OpenLibrarySearchResponse>(
-            $"search.json?title={encodedTitle}&limit=5&fields=key,title,author_name,cover_i,first_publish_year");
+            $"search.json?{parameter}={encodedQuery}&limit=5&fields=key,title,author_name,cover_i,first_publish_year");
 
         return response?.Books ?? [];
     }
