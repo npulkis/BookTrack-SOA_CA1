@@ -86,6 +86,24 @@ public sealed class ReadingListService
         });
     }
 
+    public Task UpdateReviewAsync(ReadingListEntry entry, int? rating, string? notes)
+    {
+        if (rating is < 1 or > 5)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rating), "Rating must be between one and five stars.");
+        }
+
+        return UpdateAsync(savedData =>
+        {
+            var savedEntry = savedData.Entries.FirstOrDefault(savedBook => savedBook.Book.Key == entry.Book.Key);
+            if (savedEntry is not null)
+            {
+                savedEntry.Rating = rating;
+                savedEntry.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+            }
+        });
+    }
+
     public Task UpdateGoalAsync(int year, int bookCount)
     {
         if (year < 1 || bookCount < 1)

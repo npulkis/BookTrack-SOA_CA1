@@ -56,29 +56,65 @@ else
             <ul class="list-group">
                 @foreach (var entry in ReadingListService.Entries)
                 {
-                    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <div>
-                            <strong>@(entry.Book.Title ?? "Untitled")</strong>
-                            @if (entry.Book.Authors.Count > 0)
-                            {
-                                <span>by @string.Join(", ", entry.Book.Authors)</span>
-                            }
+                    var review = GetReviewDraft(entry);
+                    <li class="list-group-item">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <strong>@(entry.Book.Title ?? "Untitled")</strong>
+                                @if (entry.Book.Authors.Count > 0)
+                                {
+                                    <span>by @string.Join(", ", entry.Book.Authors)</span>
+                                }
+                            </div>
+                            <div class="d-flex gap-2">
+                                <select class="form-select w-auto"
+                                        value="@entry.Status"
+                                        @onchange="args => UpdateStatusAsync(entry, args.Value?.ToString())"
+                                        aria-label="Reading status"
+                                        disabled="@isSaving">
+                                    <option value="@ReadingStatus.WantToRead">Want to read</option>
+                                    <option value="@ReadingStatus.Reading">Reading</option>
+                                    <option value="@ReadingStatus.Finished">Finished</option>
+                                </select>
+                                <button class="btn btn-outline-danger btn-sm"
+                                        @onclick="() => RemoveBookAsync(entry)"
+                                        disabled="@isSaving">
+                                    Remove
+                                </button>
+                            </div>
                         </div>
-                        <div class="d-flex gap-2">
-                            <select class="form-select w-auto"
-                                    value="@entry.Status"
-                                    @onchange="args => UpdateStatusAsync(entry, args.Value?.ToString())"
-                                    aria-label="Reading status"
+                        <div class="row g-2 mt-2">
+                            <div class="col-sm-3">
+                                <label class="form-label">
+                                    Rating
+                                    <select class="form-select" @bind="review.Rating" disabled="@isSaving">
+                                        <option value="">No rating</option>
+                                        <option value="1">1 star</option>
+                                        <option value="2">2 stars</option>
+                                        <option value="3">3 stars</option>
+                                        <option value="4">4 stars</option>
+                                        <option value="5">5 stars</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="col-sm-9">
+                                <label class="form-label">
+                                    Note
+                                    <textarea class="form-control" rows="2" maxlength="500"
+                                              @bind="review.Notes" disabled="@isSaving"></textarea>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mt-2">
+                            <button class="btn btn-outline-primary btn-sm"
+                                    @onclick="() => SaveReviewAsync(entry, review)"
                                     disabled="@isSaving">
-                                <option value="@ReadingStatus.WantToRead">Want to read</option>
-                                <option value="@ReadingStatus.Reading">Reading</option>
-                                <option value="@ReadingStatus.Finished">Finished</option>
-                            </select>
-                            <button class="btn btn-outline-danger btn-sm"
-                                    @onclick="() => RemoveBookAsync(entry)"
-                                    disabled="@isSaving">
-                                Remove
+                                Save rating and note
                             </button>
+                            @if (review.Message is not null)
+                            {
+                                <span role="status">@review.Message</span>
+                            }
                         </div>
                     </li>
                 }
@@ -94,9 +130,22 @@ else
     private int goalTarget = 12;
     private string? errorMessage;
     private string? goalSavedMessage;
+    private readonly Dictionary<string, ReviewDraft> reviewDrafts = [];
 
     private int FinishedCount => ReadingListService.GetFinishedCount(goalYear);
     private int ProgressPercent => goalTarget > 0 ? Math.Min(100, FinishedCount * 100 / goalTarget) : 0;
+
+    private ReviewDraft GetReviewDraft(ReadingListEntry entry)
+    {
+        var key = entry.Book.Key ?? string.Empty;
+        if (!reviewDrafts.TryGetValue(key, out var draft))
+        {
+            draft = new ReviewDraft { Rating = entry.Rating, Notes = entry.Notes };
+            reviewDrafts[key] = draft;
+        }
+
+        return draft;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,10 +199,24 @@ else
         return SaveChangesAsync(() => ReadingListService.UpdateStatusAsync(entry, status));
     }
 
-    private Task RemoveBookAsync(ReadingListEntry entry)
+    private async Task RemoveBookAsync(ReadingListEntry entry)
     {
         goalSavedMessage = null;
-        return SaveChangesAsync(() => ReadingListService.RemoveAsync(entry));
+        await SaveChangesAsync(() => ReadingListService.RemoveAsync(entry));
+        if (errorMessage is null)
+        {
+            reviewDrafts.Remove(entry.Book.Key ?? string.Empty);
+        }
+    }
+
+    private async Task SaveReviewAsync(ReadingListEntry entry, ReviewDraft review)
+    {
+        review.Message = null;
+        await SaveChangesAsync(() => ReadingListService.UpdateReviewAsync(entry, review.Rating, review.Notes));
+        if (errorMessage is null)
+        {
+            review.Message = "Saved.";
+        }
     }
 
     private async Task SaveChangesAsync(Func<Task> save)
@@ -180,5 +243,12 @@ else
         {
             isSaving = false;
         }
+    }
+
+    private sealed class ReviewDraft
+    {
+        public int? Rating { get; set; }
+        public string? Notes { get; set; }
+        public string? Message { get; set; }
     }
 }
