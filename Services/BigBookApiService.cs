@@ -43,6 +43,7 @@ public sealed class BigBookApiService(HttpClient httpClient, IConfiguration conf
         var themeContext = themes.Count > 0
             ? string.Join(", ", themes)
             : description;
+        // Search by the book's subjects rather than its title to find thematic matches.
         var query = $"books about {themeContext}";
 
         var matches = await SearchBooksAsync(query);

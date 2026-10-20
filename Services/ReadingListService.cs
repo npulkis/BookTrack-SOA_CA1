@@ -6,6 +6,7 @@ namespace BookTrack.Services;
 
 public sealed class ReadingListService
 {
+    // Share the lock across scoped instances so overlapping updates do not overwrite each other.
     private static readonly SemaphoreSlim FileLock = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -146,6 +147,7 @@ public sealed class ReadingListService
 
         if (document.RootElement.ValueKind == JsonValueKind.Array)
         {
+            // Convert the original array format to the current data format on the next save.
             var oldEntries = document.RootElement.Deserialize<List<ReadingListEntry>>(JsonOptions) ?? [];
             return (new ReadingListData { Entries = oldEntries }, true);
         }
@@ -164,6 +166,7 @@ public sealed class ReadingListService
             await JsonSerializer.SerializeAsync(stream, savedData, JsonOptions);
         }
 
+        // Replace the saved file only after the new JSON has been written successfully.
         File.Move(temporaryFilePath, filePath, overwrite: true);
     }
 }

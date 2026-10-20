@@ -10,6 +10,10 @@
 <PageTitle>Book Search</PageTitle>
 
 <h1>Book search</h1>
+@if (readingListError is not null)
+{
+    <p role="alert">@readingListError</p>
+}
 
 <form class="mb-4" @onsubmit="SearchBooksAsync" @onsubmit:preventDefault="true">
     <label class="form-label" for="search-field">Search type</label>
@@ -39,7 +43,7 @@ else if (errorMessage is not null)
 }
 else if (!hasSearched)
 {
-        <p>Search by title, author, or describe the kind of book you’re looking for.</p>
+    <p>Search by title, author, or describe the kind of book you’re looking for.</p>
 }
 else
 {
@@ -104,6 +108,7 @@ else
     private string? readingListError;
     private bool isAddingBigBook;
 
+    // Load saved books so the page can show which results are already in the list.
     protected override async Task OnInitializedAsync()
     {
         try
@@ -203,7 +208,7 @@ else
         }
     }
 
-    // Search Open Library with the title entered in the form.
+    // Send the search to the selected book service.
     private async Task SearchBooksAsync()
     {
         hasSearched = true;
@@ -276,6 +281,7 @@ else
 
     private static int? ReadCoverId(string? imageUrl)
     {
+        // Convert Big Book's cover URL to the ID format used by Open Library.
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri))
         {
             return null;

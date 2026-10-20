@@ -51,6 +51,7 @@ app.Run();
 
 static void LoadLocalEnvironmentFile()
 {
+    // Environment variables already set by the system take priority over the local .env file.
     var path = Path.Combine(Directory.GetCurrentDirectory(), ".env");
     if (!File.Exists(path))
     {
