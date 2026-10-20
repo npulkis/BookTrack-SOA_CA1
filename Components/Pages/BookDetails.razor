@@ -5,6 +5,7 @@
 @using BookTrack.Services
 @using Microsoft.AspNetCore.Components
 @inject OpenLibraryService OpenLibraryService
+@inject BigBookApiService BigBookApiService
 
 <PageTitle>@(Title ?? "Book details")</PageTitle>
 
@@ -54,6 +55,47 @@ else if (work is not null)
             </section>
         }
 
+        @if (BigBookApiService.HasApiKey)
+        {
+            <section>
+                <h2>Books with similar themes</h2>
+                @if (isLoadingSimilar)
+                {
+                    <p>Finding similar books…</p>
+                }
+                else if (similarErrorMessage is not null)
+                {
+                    <p role="status">@similarErrorMessage</p>
+                }
+                else if (similarBooks.Count == 0)
+                {
+                    <p>No similar books found.</p>
+                }
+                else
+                {
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                        @foreach (var similarBook in similarBooks)
+                        {
+                            <div class="col">
+                                <article class="card h-100">
+                                    @if (!string.IsNullOrWhiteSpace(similarBook.Image))
+                                    {
+                                        <img class="card-img-top book-cover"
+                                             src="@similarBook.Image"
+                                             alt="Cover of @(similarBook.Title ?? "book")"
+                                             loading="lazy" />
+                                    }
+                                    <div class="card-body">
+                                        <h3 class="h5 card-title">@(similarBook.Title ?? "Untitled")</h3>
+                                    </div>
+                                </article>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
         <p class="mt-3">
             <a href="https://openlibrary.org/works/@WorkId" target="_blank" rel="noopener noreferrer">
                 Open Library record
@@ -75,6 +117,9 @@ else if (work is not null)
     private OpenLibraryWork? work;
     private bool isLoading = true;
     private string? errorMessage;
+    private List<BigBookSimilarBook> similarBooks = [];
+    private bool isLoadingSimilar;
+    private string? similarErrorMessage;
 
     private string? Title => work?.Title;
     private string? Description => work?.Description;
@@ -86,6 +131,9 @@ else if (work is not null)
         work = null;
         isLoading = true;
         errorMessage = null;
+        similarBooks = [];
+        similarErrorMessage = null;
+        isLoadingSimilar = BigBookApiService.HasApiKey;
 
         try
         {
@@ -106,6 +154,52 @@ else if (work is not null)
         finally
         {
             isLoading = false;
+        }
+
+        if (work is not null && isLoadingSimilar)
+        {
+            _ = LoadSimilarBooksAsync(WorkId, work.Title);
+        }
+    }
+
+    private async Task LoadSimilarBooksAsync(string requestedWorkId, string? title)
+    {
+        try
+        {
+            var results = await BigBookApiService.GetThemeRelatedBooksAsync(title, Description, Subjects);
+            if (WorkId == requestedWorkId)
+            {
+                similarBooks = results;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            if (WorkId == requestedWorkId)
+            {
+                similarErrorMessage = "Similar books could not be loaded. Check your connection and try again.";
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            if (WorkId == requestedWorkId)
+            {
+                similarErrorMessage = "The similar-books request timed out. Please try again later.";
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            if (WorkId == requestedWorkId)
+            {
+                similarErrorMessage = "Big Book API returned data the app could not read.";
+            }
+        }
+        finally
+        {
+            if (WorkId == requestedWorkId)
+            {
+                isLoadingSimilar = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 }

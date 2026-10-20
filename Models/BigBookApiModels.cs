@@ -8,6 +8,18 @@ public sealed class BigBookSearchResponse
     public List<List<BigBookBook>> Books { get; init; } = [];
 }
 
+public sealed class BigBookSimilarBook
+{
+    [JsonPropertyName("id")]
+    public int Id { get; init; }
+
+    [JsonPropertyName("title")]
+    public string? Title { get; init; }
+
+    [JsonPropertyName("image")]
+    public string? Image { get; init; }
+}
+
 public sealed class BigBookBook
 {
     [JsonPropertyName("id")]
