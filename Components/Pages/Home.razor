@@ -4,6 +4,7 @@
 @using BookTrack.Models
 @using BookTrack.Services
 @inject OpenLibraryService OpenLibraryService
+@inject BigBookApiService BigBookApiService
 @inject ReadingListService ReadingListService
 
 <PageTitle>Book Search</PageTitle>
@@ -11,17 +12,17 @@
 <h1>Book search</h1>
 
 <form class="mb-4" @onsubmit="SearchBooksAsync" @onsubmit:preventDefault="true">
-    <label class="form-label" for="search-field">Search by</label>
+    <label class="form-label" for="search-field">Search type</label>
     <div class="input-group">
         <select id="search-field" class="form-select" @bind="searchField" aria-label="Search by">
             <option value="title">Title</option>
             <option value="author">Author</option>
+            <option value="natural">Describe a book</option>
         </select>
         <input id="book-search"
                class="form-control"
                type="search"
-               placeholder="@SearchPlaceholder"
-               aria-label="Search term"
+               aria-label="Search term or book description"
                @bind="searchQuery" />
         <button class="btn btn-primary" type="submit" disabled="@isLoading">Search</button>
     </div>
@@ -38,41 +39,49 @@ else if (errorMessage is not null)
 }
 else if (!hasSearched)
 {
-    <p>Enter a book title to see results.</p>
+        <p>Search by title, author, or describe the kind of book you’re looking for.</p>
 }
 else
 {
     <h2>Results</h2>
-    @if (books.Count == 0)
+    @if (searchResults.Count == 0)
     {
         <p>No books found.</p>
     }
     else
     {
         <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-            @foreach (var book in books)
+            @foreach (var book in searchResults)
             {
                 <div class="col">
                     <article class="card h-100">
-                        @if (book.CoverId is not null)
+                        @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
                         {
                             <img class="card-img-top book-cover"
-                                 src="https://covers.openlibrary.org/b/id/@(book.CoverId)-M.jpg?default=false"
-                                 alt="Cover of @book.Title"
+                                 src="@book.CoverUrl"
+                                 alt="Cover of @(book.Title ?? "book")"
                                  loading="lazy" />
                         }
                         <div class="card-body">
                             <h2 class="h5 card-title">@(book.Title ?? "Untitled")</h2>
                             <p class="card-text">
-                                @(book.Authors.Count > 0 ? string.Join(", ", book.Authors) : "Author not listed")
+                            @(book.Authors.Count > 0 ? string.Join(", ", book.Authors) : "Author not listed")
                             </p>
-                            @if (!string.IsNullOrWhiteSpace(book.Key))
+                            @if (book.OpenLibraryBook is not null && !string.IsNullOrWhiteSpace(book.OpenLibraryBook.Key))
                             {
-                                <a class="btn btn-outline-primary" href="@DetailsUrl(book)">View details</a>
+                                <a class="btn btn-outline-primary" href="@DetailsUrl(book.OpenLibraryBook)">View details</a>
                                 <button class="btn btn-primary ms-2"
-                                        @onclick="() => AddToReadingListAsync(book)"
-                                        disabled="@(isLoadingReadingList || isSavingReadingList || ReadingListService.Contains(book))">
-                                    @(ReadingListService.Contains(book) ? "Added" : "Add to reading list")
+                                        @onclick="() => AddToReadingListAsync(book.OpenLibraryBook)"
+                                        disabled="@(isLoadingReadingList || isSavingReadingList || ReadingListService.Contains(book.OpenLibraryBook))">
+                                    @(ReadingListService.Contains(book.OpenLibraryBook) ? "Added" : "Add to reading list")
+                                </button>
+                            }
+                            else if (book.BigBookBook is not null)
+                            {
+                                <button class="btn btn-primary"
+                                        @onclick="() => AddBigBookToReadingListAsync(book.BigBookBook)"
+                                        disabled="@(isLoadingReadingList || isSavingReadingList || isAddingBigBook)">
+                                    Add to reading list
                                 </button>
                             }
                         </div>
@@ -86,13 +95,14 @@ else
 @code {
     private string searchQuery = string.Empty;
     private string searchField = "title";
-    private List<OpenLibraryBook> books = [];
+    private List<BookSearchResult> searchResults = [];
     private bool isLoading;
     private bool hasSearched;
     private string? errorMessage;
     private bool isLoadingReadingList = true;
     private bool isSavingReadingList;
     private string? readingListError;
+    private bool isAddingBigBook;
 
     protected override async Task OnInitializedAsync()
     {
@@ -121,6 +131,50 @@ else
     private Task AddToReadingListAsync(OpenLibraryBook book)
     {
         return UpdateReadingListAsync(() => ReadingListService.AddAsync(book));
+    }
+
+    private async Task AddBigBookToReadingListAsync(BigBookBook book)
+    {
+        isAddingBigBook = true;
+        errorMessage = null;
+        try
+        {
+            var details = await BigBookApiService.GetBookAsync(book.Id);
+            var workId = details?.Identifiers?.OpenLibraryId;
+            if (string.IsNullOrWhiteSpace(workId))
+            {
+                errorMessage = "This book does not have an Open Library record, so it cannot be added yet.";
+                return;
+            }
+
+            var libraryBook = new OpenLibraryBook
+            {
+                Key = $"/works/{workId}",
+                Title = details.Title ?? book.Title,
+                Authors = (details.Authors.Count > 0 ? details.Authors : book.Authors)
+                    .Where(author => !string.IsNullOrWhiteSpace(author.Name))
+                    .Select(author => author.Name!)
+                    .ToList(),
+                CoverId = ReadCoverId(details.Image ?? book.Image)
+            };
+            await AddToReadingListAsync(libraryBook);
+        }
+        catch (HttpRequestException)
+        {
+            errorMessage = "Big Book API could not be reached. Check your connection and try again.";
+        }
+        catch (TaskCanceledException)
+        {
+            errorMessage = "The Big Book API request timed out. Please try again later.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            errorMessage = "Big Book API returned data the app could not read.";
+        }
+        finally
+        {
+            isAddingBigBook = false;
+        }
     }
 
     private async Task UpdateReadingListAsync(Func<Task> update)
@@ -157,7 +211,7 @@ else
         if (string.IsNullOrWhiteSpace(query))
         {
             // Ask for a search term before sending the request.
-            books = [];
+            searchResults = [];
             errorMessage = "Enter a search term.";
             isLoading = false;
             return;
@@ -169,19 +223,50 @@ else
 
         try
         {
-            books = await OpenLibraryService.SearchBooksAsync(query, searchField);
+            if (searchField == "natural")
+            {
+                if (!BigBookApiService.HasApiKey)
+                {
+                    errorMessage = "Add your Big Book API key to user secrets to use natural-language search.";
+                    return;
+                }
+
+                var results = await BigBookApiService.SearchBooksAsync(query);
+                searchResults = results.Select(book => new BookSearchResult(
+                    book.Title,
+                    book.Authors.Where(author => !string.IsNullOrWhiteSpace(author.Name))
+                        .Select(author => author.Name!)
+                        .ToList(),
+                    book.Image,
+                    BigBookBook: book)).ToList();
+            }
+            else
+            {
+                var results = await OpenLibraryService.SearchBooksAsync(query, searchField);
+                searchResults = results.Select(book => new BookSearchResult(
+                    book.Title,
+                    book.Authors,
+                    book.CoverId is null ? null : $"https://covers.openlibrary.org/b/id/{book.CoverId}-M.jpg?default=false",
+                    OpenLibraryBook: book)).ToList();
+            }
         }
         catch (HttpRequestException)
         {
-            errorMessage = "Open Library could not be reached. Check your connection and try again.";
+            errorMessage = searchField == "natural"
+                ? "Big Book API could not be reached. Check your connection and try again."
+                : "Open Library could not be reached. Check your connection and try again.";
         }
         catch (TaskCanceledException)
         {
-            errorMessage = "The Open Library request timed out. Please try again later.";
+            errorMessage = searchField == "natural"
+                ? "The Big Book API request timed out. Please try again later."
+                : "The Open Library request timed out. Please try again later.";
         }
         catch (System.Text.Json.JsonException)
         {
-            errorMessage = "Open Library returned data the app could not read.";
+            errorMessage = searchField == "natural"
+                ? "Big Book API returned data the app could not read."
+                : "Open Library returned data the app could not read.";
         }
         finally
         {
@@ -189,9 +274,16 @@ else
         }
     }
 
-    private string SearchPlaceholder => searchField == "author"
-        ? "Enter an author name"
-        : "Enter a book title";
+    private static int? ReadCoverId(string? imageUrl)
+    {
+        if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var id = uri.AbsolutePath.Split('/').LastOrDefault()?.Split('-').FirstOrDefault();
+        return int.TryParse(id, out var coverId) ? coverId : null;
+    }
 
     private static string DetailsUrl(OpenLibraryBook book)
     {
